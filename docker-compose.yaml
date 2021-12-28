@@ -1,0 +1,91 @@
+version: '3'
+
+services:
+
+  nginx-proxy:
+    image: jwilder/nginx-proxy
+    ports:
+      - '80:80'
+    #  - '443:443'
+    volumes:
+      - '/var/run/docker.sock:/tmp/docker.sock:ro'
+      - 'certs:/etc/nginx/certs:ro'
+      - 'vhostd:/etc/nginx/vhost.d'
+      - 'html:/usr/share/nginx/html'
+    networks:
+      - node-webapp-network
+
+  procesos:
+    stdin_open: true
+    build:
+      context: ./backend/procesos
+      dockerfile: Dockerfile
+    expose:
+      - '3000'
+    links:
+      - mongo
+    depends_on:
+      mongo:
+        condition: service_healthy
+    networks:
+      - node-webapp-network
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:3000/procesos" ]
+      interval: 30s
+      timeout: 20s
+      retries: 6
+    deploy:
+      replicas: 2
+    environment:
+      - VIRTUAL_HOST=procesos.localhost
+  
+  formatos:
+    stdin_open: true
+    build:
+      context: ./backend/formatos
+      dockerfile: Dockerfile
+    expose:
+      - '3001'
+    links:
+      - mongo
+    depends_on:
+      mongo:
+        condition: service_healthy
+    networks:
+      - node-webapp-network
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:3001/formatos" ]
+      interval: 30s
+      timeout: 20s
+      retries: 6
+    deploy:
+      replicas: 2
+    environment:
+      - VIRTUAL_HOST=formatos.localhost  
+
+
+  mongo:
+    container_name: mongo-container
+    image: mongo:4.4.6
+    restart: always
+    volumes:
+      - ./mongo:/data/db
+      - ./mongo/auth/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+    expose:
+      - '27017'
+    networks:
+      - node-webapp-network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongo mongo:27017/test --quiet
+      interval: 30s
+      timeout: 20s
+      retries: 6
+
+networks:
+  node-webapp-network:
+    driver: bridge
+
+volumes:
+  certs: null
+  html: null
+  vhostd: null
